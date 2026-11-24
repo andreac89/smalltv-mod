@@ -1,0 +1,55 @@
+name: build-sdpro
+
+# Compila solo le immagini ESP8266 che servono all'SDPro Smart Weather Clock:
+#   - SDP_loader.bin          -> da caricare sulla pagina di update originale (primo passo)
+#   - smalltv-mod-firmware.bin -> da caricare su http://192.168.4.1/update (secondo passo)
+#                                 e per tutti gli aggiornamenti successivi
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-sdpro-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            pio-sdpro-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: pip install platformio==6.1.19
+
+      - name: Build firmware + loader (ESP8266)
+        run: pio run -e smalltv -e smalltv_loader
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p dist
+          cp .pio/build/smalltv/firmware.bin        dist/smalltv-mod-firmware.bin
+          cp .pio/build/smalltv_loader/firmware.bin dist/SDP_loader.bin
+          ls -l dist
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdpro-firmware
+          path: dist/
